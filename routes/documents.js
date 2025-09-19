@@ -21,7 +21,7 @@ router.post('/upload', authMiddleware, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Support storing as array if multiple files per type
+    // Convert to array if needed
     if (!user.documents[type]) user.documents[type] = [];
     if (!Array.isArray(user.documents[type])) user.documents[type] = [user.documents[type]];
 
@@ -36,7 +36,7 @@ router.post('/upload', authMiddleware, async (req, res) => {
 });
 
 // =======================
-// Fetch all documents for the logged-in user
+// Fetch all documents for logged-in user
 // =======================
 router.get('/my-documents', authMiddleware, async (req, res) => {
   try {
