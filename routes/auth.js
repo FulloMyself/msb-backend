@@ -8,25 +8,45 @@ require('dotenv').config();
 const User = require('../models/User');
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecret_jwt_key';
 
-// Register (frontend users)
+// ========================
+// REGISTER NEW USER
+// ========================
 router.post('/register', async (req, res) => {
+  const { name, email, password } = req.body; // no phone required here
+
+  // 1. Validate input
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email and password are required.' });
+  }
+
   try {
-    const { name = '', email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+    // 2. Check if user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ error: 'Email already registered.' });
+    }
 
-    const exists = await User.findOne({ email });
-    if (exists) return res.status(400).json({ message: 'Email already registered' });
+    // 3. Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = new User({ name, email, password: passwordHash, role: 'user' });
-    await user.save();
+    // 4. Create user (phone defaults to empty string in schema)
+    const newUser = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: 'user', // always user by default
+      createdAt: new Date()
+    });
 
-    return res.status(201).json({ message: 'Registered' });
+    await newUser.save();
+
+    res.status(201).json({ message: 'User registered successfully.' });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Server error during registration.' });
   }
 });
+
 
 // Login (both roles)
 router.post('/login', async (req, res) => {
