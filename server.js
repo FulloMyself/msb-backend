@@ -6,9 +6,9 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
-const loanRoutes = require('./routes/loans');
+const loansRoutes = require('./routes/loans');
 const adminRoutes = require('./routes/admin');
-const userRoutes = require('./routes/users');
+const usersRouter = require('./routes/users');
 
 
 const app = express();
@@ -20,9 +20,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', docRoutes);
-app.use('/api/loans', loanRoutes);
+app.use('/api/loans', loansRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/users', usersRouter);
 
 
 const PORT = process.env.PORT || 5000;
