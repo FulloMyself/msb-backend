@@ -8,7 +8,9 @@ const User = require('../models/User');
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) { cb(null, uploadsDir); },
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
   filename: function (req, file, cb) {
     const ext = path.extname(file.originalname);
     cb(null, Date.now() + '-' + file.fieldname + ext);
@@ -16,11 +18,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Upload documents (multiple files per type)
 router.post('/upload', auth, upload.fields([
-  { name: 'idCopy', maxCount: 1 },
-  { name: 'payslip', maxCount: 1 },
-  { name: 'proofOfResidence', maxCount: 1 },
-  { name: 'bankStatement', maxCount: 1 } // only 1 now
+  { name: 'idCopy', maxCount: 10 },
+  { name: 'payslip', maxCount: 10 },
+  { name: 'proofOfResidence', maxCount: 10 },
+  { name: 'bankStatement', maxCount: 10 }
 ]), async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
@@ -29,18 +32,24 @@ router.post('/upload', auth, upload.fields([
     // Initialize documents if not present
     if (!user.documents) {
       user.documents = {
-        idCopy: null,
-        payslip: null,
-        proofOfResidence: null,
-        bankStatement: null
+        idCopy: [],
+        payslip: [],
+        proofOfResidence: [],
+        bankStatement: []
       };
     }
 
     const files = req.files || {};
-    if (files.idCopy && files.idCopy[0]) user.documents.idCopy = `/uploads/${files.idCopy[0].filename}`;
-    if (files.payslip && files.payslip[0]) user.documents.payslip = `/uploads/${files.payslip[0].filename}`;
-    if (files.proofOfResidence && files.proofOfResidence[0]) user.documents.proofOfResidence = `/uploads/${files.proofOfResidence[0].filename}`;
-    if (files.bankStatement && files.bankStatement[0]) user.documents.bankStatement = `/uploads/${files.bankStatement[0].filename}`;
+
+    // Helper to append new files to existing array
+    const appendFiles = (type) => {
+      if (files[type]) {
+        const uploadedPaths = files[type].map(f => `/uploads/${f.filename}`);
+        user.documents[type] = [...user.documents[type], ...uploadedPaths];
+      }
+    };
+
+    ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'].forEach(appendFiles);
 
     await user.save();
     return res.json({ message: 'Documents saved', documents: user.documents });
@@ -50,7 +59,7 @@ router.post('/upload', auth, upload.fields([
   }
 });
 
-// get my documents
+// Get my documents
 router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('documents');
