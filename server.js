@@ -8,6 +8,8 @@ const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const loanRoutes = require('./routes/loans');
 const adminRoutes = require('./routes/admin');
+const userRoutes = require('./routes/users');
+
 
 const app = express();
 app.use(cors());
@@ -20,6 +22,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/documents', docRoutes);
 app.use('/api/loans', loanRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/users', userRoutes);
+
 
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/msbfinance';
