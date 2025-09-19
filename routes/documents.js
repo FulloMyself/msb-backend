@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { authMiddleware } = require('../middleware/auth');
+const authMiddleware = require('../middleware/auth');
 
 // Allowed document types
 const DOC_TYPES = ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'];
