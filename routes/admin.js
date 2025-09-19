@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Loan = require('../models/Loan'); // make sure this exists
-const Document = require('../models/Document'); // make sure this exists
+
 
 // ==========================
 // GET ADMIN DASHBOARD STATS
@@ -77,7 +77,7 @@ router.patch('/document/:id/status', async (req, res) => {
   }
 
   try {
-    const doc = await Document.findById(id);
+    const doc = await User.findById(id);
     if (!doc) return res.status(404).json({ message: 'Document not found' });
 
     doc.status = status;
