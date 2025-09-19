@@ -6,7 +6,7 @@ const { Upload } = require('@aws-sdk/lib-storage');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 
-// Configure AWS S3 Client (v3)
+// AWS S3 client
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -15,27 +15,28 @@ const s3 = new S3Client({
   }
 });
 
-// Multer memory storage to access file buffers
+// Multer in memory storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Helper function to upload a single file to S3
-const uploadFileToS3 = async (file, folder = 'documents') => {
-  const key = `${folder}/${Date.now()}-${file.originalname}`;
-  const upload = new Upload({
+// Helper function to upload a file buffer to S3
+const uploadToS3 = async (file, folder) => {
+  const params = {
+    Bucket: process.env.AWS_S3_BUCKET,
+    Key: `${folder}/${Date.now()}-${file.originalname}`,
+    Body: file.buffer,
+    ContentType: file.mimetype
+  };
+
+  const parallelUpload = new Upload({
     client: s3,
-    params: {
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: key,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-      ACL: 'private', // change to 'public-read' if needed
-    },
+    params
   });
 
-  await upload.done();
-  // Return the S3 URL
-  return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+  await parallelUpload.done();
+
+  // Return public URL
+  return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${params.Key}`;
 };
 
 // Upload documents (multiple files per type)
@@ -53,7 +54,6 @@ router.post(
       const user = await User.findById(req.user.userId);
       if (!user) return res.status(404).json({ message: 'User not found' });
 
-      // Initialize documents if not present
       if (!user.documents) {
         user.documents = {
           idCopy: [],
@@ -65,17 +65,22 @@ router.post(
 
       const files = req.files || {};
 
-      // Helper to upload files for a specific type
+      // Upload each file type
       const processFiles = async (type) => {
         if (files[type]) {
-          const uploadedUrls = await Promise.all(
-            files[type].map(f => uploadFileToS3(f, type))
+          const urls = await Promise.all(
+            files[type].map(file => uploadToS3(file, type))
           );
-          user.documents[type] = [...user.documents[type], ...uploadedUrls];
+          user.documents[type] = [...user.documents[type], ...urls];
         }
       };
 
-      await Promise.all(['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'].map(processFiles));
+      await Promise.all([
+        processFiles('idCopy'),
+        processFiles('payslip'),
+        processFiles('proofOfResidence'),
+        processFiles('bankStatement')
+      ]);
 
       await user.save();
       return res.json({ message: 'Documents saved', documents: user.documents });
