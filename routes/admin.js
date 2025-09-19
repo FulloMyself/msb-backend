@@ -1,66 +1,119 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
 const User = require('../models/User');
-const Loan = require('../models/Loan');
+const Loan = require('../models/Loan'); // make sure this exists
+const Document = require('../models/Document'); // make sure this exists
 
-// admin-only middleware
-function isAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') return res.status(403).json({ message: 'Admins only' });
-  next();
-}
-
-// list all users
-router.get('/users', auth, isAdmin, async (req, res) => {
+// ==========================
+// GET ADMIN DASHBOARD STATS
+// ==========================
+router.get('/stats', async (req, res) => {
   try {
-    const users = await User.find().select('-passwordHash');
-    return res.json({ users });
+    const totalUsers = await User.countDocuments();
+    const pendingLoans = await Loan.countDocuments({ status: 'pending' });
+    const totalLoanAmount = await Loan.aggregate([
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+
+    res.json({
+      totalUsers,
+      pendingLoans,
+      totalLoanAmount: totalLoanAmount[0] ? totalLoanAmount[0].total : 0
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Error fetching admin stats' });
   }
 });
 
-// get a user with their loans
-router.get('/user/:id', auth, isAdmin, async (req, res) => {
+// ==========================
+// GET ALL USERS
+// ==========================
+router.get('/users', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-passwordHash');
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    const loans = await Loan.find({ userId: user._id }).sort({ createdAt: -1 });
-    return res.json({ user, loans });
+    const users = await User.find().select('-password'); // exclude passwords
+    res.json(users);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Error fetching users' });
   }
 });
 
-// update loan status
-router.patch('/loan/:loanId', auth, isAdmin, async (req, res) => {
+// ==========================
+// GET ALL LOANS
+// ==========================
+router.get('/loans', async (req, res) => {
   try {
-    const { status } = req.body;
-    if (!['pending','approved','rejected'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
+    const loans = await Loan.find().populate('user', 'name email'); // link user info
+    res.json(loans);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching loans' });
+  }
+});
 
-    const loan = await Loan.findById(req.params.loanId);
+// ==========================
+// GET ALL DOCUMENTS
+// ==========================
+router.get('/documents', async (req, res) => {
+  try {
+    const documents = await Document.find().populate('user', 'name email');
+    res.json(documents);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching documents' });
+  }
+});
+
+// ==========================
+// UPDATE DOCUMENT STATUS
+// ==========================
+router.patch('/document/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (!['pending', 'approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid status value' });
+  }
+
+  try {
+    const doc = await Document.findById(id);
+    if (!doc) return res.status(404).json({ message: 'Document not found' });
+
+    doc.status = status;
+    await doc.save();
+
+    res.json({ message: 'Document status updated', document: doc });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error updating document status' });
+  }
+});
+
+// ==========================
+// UPDATE LOAN STATUS
+// ==========================
+router.patch('/loan/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (!['pending', 'under-review', 'approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid loan status value' });
+  }
+
+  try {
+    const loan = await Loan.findById(id);
     if (!loan) return res.status(404).json({ message: 'Loan not found' });
 
     loan.status = status;
     await loan.save();
-    return res.json({ message: 'Loan status updated', loan });
+
+    res.json({ message: 'Loan status updated', loan });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Error updating loan status' });
   }
 });
 
-// list all loans (admin)
-router.get('/loans', auth, isAdmin, async (req, res) => {
-  try {
-    const loans = await Loan.find().populate('userId', 'email').sort({ createdAt: -1 });
-    return res.json({ loans });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Server error' });
-  }
-});
 
 module.exports = router;
