@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const Loan = require('../models/Loan'); // make sure this exists
-
+const Loan = require('../models/Loan');
+const { authMiddleware } = require('../middleware/auth');
 
 // ==========================
 // GET ADMIN DASHBOARD STATS
 // ==========================
-router.get('/stats', async (req, res) => {
+router.get('/stats', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
+
   try {
     const totalUsers = await User.countDocuments();
     const pendingLoans = await Loan.countDocuments({ status: 'pending' });
@@ -29,7 +31,9 @@ router.get('/stats', async (req, res) => {
 // ==========================
 // GET ALL USERS
 // ==========================
-router.get('/users', async (req, res) => {
+router.get('/users', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
+
   try {
     const users = await User.find().select('-password'); // exclude passwords
     res.json(users);
@@ -42,9 +46,11 @@ router.get('/users', async (req, res) => {
 // ==========================
 // GET ALL LOANS
 // ==========================
-router.get('/loans', async (req, res) => {
+router.get('/loans', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
+
   try {
-    const loans = await Loan.find().populate('user', 'name email'); // link user info
+    const loans = await Loan.find().populate('user', 'name email');
     res.json(loans);
   } catch (err) {
     console.error(err);
@@ -55,10 +61,12 @@ router.get('/loans', async (req, res) => {
 // ==========================
 // GET ALL DOCUMENTS
 // ==========================
-router.get('/documents', async (req, res) => {
+router.get('/documents', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
+
   try {
-    const documents = await Document.find().populate('user', 'name email');
-    res.json(documents);
+    const users = await User.find({}, 'name email documents');
+    res.json(users);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error fetching documents' });
@@ -68,22 +76,28 @@ router.get('/documents', async (req, res) => {
 // ==========================
 // UPDATE DOCUMENT STATUS
 // ==========================
-router.patch('/document/:id/status', async (req, res) => {
-  const { id } = req.params;
+router.put('/document/:userId/:docType/:index/status', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
+
+  const { userId, docType, index } = req.params;
   const { status } = req.body;
 
-  if (!['pending', 'approved', 'rejected'].includes(status)) {
-    return res.status(400).json({ message: 'Invalid status value' });
-  }
+  const DOC_TYPES = ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'];
+  if (!DOC_TYPES.includes(docType)) return res.status(400).json({ message: 'Invalid document type' });
+  if (!['pending', 'approved', 'rejected'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
 
   try {
-    const doc = await User.findById(id);
-    if (!doc) return res.status(404).json({ message: 'Document not found' });
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    doc.status = status;
-    await doc.save();
+    if (!user.documents[docType] || !user.documents[docType][index]) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
 
-    res.json({ message: 'Document status updated', document: doc });
+    user.documents[docType][index].status = status;
+    await user.save();
+
+    res.json({ message: 'Document status updated', documents: user.documents });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error updating document status' });
@@ -93,7 +107,9 @@ router.patch('/document/:id/status', async (req, res) => {
 // ==========================
 // UPDATE LOAN STATUS
 // ==========================
-router.patch('/loan/:id/status', async (req, res) => {
+router.put('/loan/:id/status', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
+
   const { id } = req.params;
   const { status } = req.body;
 
@@ -114,6 +130,5 @@ router.patch('/loan/:id/status', async (req, res) => {
     res.status(500).json({ message: 'Error updating loan status' });
   }
 });
-
 
 module.exports = router;

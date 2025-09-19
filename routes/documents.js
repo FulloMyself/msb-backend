@@ -1,33 +1,58 @@
 // backend/routes/documents.js
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
 const User = require('../models/User');
-const authMiddleware = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 // Allowed document types
 const DOC_TYPES = ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'];
 
 // =======================
+// Multer setup
+// =======================
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, '../uploads'));
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `${file.fieldname}-${Date.now()}${ext}`;
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({ storage });
+
+// =======================
 // Upload a document
 // =======================
-router.post('/upload', authMiddleware, async (req, res) => {
+router.post('/upload', authMiddleware, upload.single(), async (req, res) => {
   try {
-    const { type, fileUrl } = req.body;
+    const file = req.file || req.body.file; // multer will provide req.file if using single upload
+    const { type } = req.body;
 
     if (!DOC_TYPES.includes(type)) {
       return res.status(400).json({ error: 'Invalid document type' });
     }
 
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileUrl = `/uploads/${file.filename || file}`; // multer path
+
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Convert to array if needed
     if (!user.documents[type]) user.documents[type] = [];
     if (!Array.isArray(user.documents[type])) user.documents[type] = [user.documents[type]];
 
     user.documents[type].push({ fileUrl, status: 'pending', uploadedAt: new Date() });
 
     await user.save();
+
     res.status(201).json({ message: 'Document uploaded successfully', documents: user.documents });
   } catch (err) {
     console.error('Error uploading document:', err);
