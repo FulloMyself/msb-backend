@@ -2,89 +2,58 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken'); // optional
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
 const User = require('../models/User');
+const JWT_SECRET = process.env.JWT_SECRET || 'verysecret_jwt_key';
 
-// ========================
-// REGISTER NEW USER
-// ========================
+// Register (frontend users)
 router.post('/register', async (req, res) => {
-  const { name, email, password } = req.body; // removed phone
-
-  // 1. Validate input
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email and password are required.' });
-  }
-
   try {
-    // 2. Check if user exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({ error: 'Email already registered.' });
-    }
+    const { name = '', email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
 
-    // 3. Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(400).json({ message: 'Email already registered' });
 
-    // 4. Create user
-    const newUser = new User({
-      name,
-      email,
-      password: hashedPassword,
-      role: 'user', // frontend users always default to 'user'
-    });
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = new User({ name, email, password: passwordHash, role: 'user' });
+    await user.save();
 
-    await newUser.save();
-
-    res.status(201).json({ message: 'User registered successfully.' });
+    return res.status(201).json({ message: 'Registered' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error during registration.' });
+    return res.status(500).json({ message: 'Server error' });
   }
 });
 
-// ========================
-// LOGIN USER
-// ========================
+// Login (both roles)
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  // 1. Validate input
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
-  }
-
   try {
-    // 2. Find user
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
+    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
 
-    // 3. Compare password safely
-    const isMatch = await bcrypt.compare(password, user.password || '');
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials.' });
-    }
+    // Support either `password` or legacy `passwordHash` fields in DB
+    const storedHash = user.password || user.passwordHash;
+    if (!storedHash) return res.status(500).json({ message: 'User has no password set' });
 
-    // 4. Optional JWT
-    // const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    const ok = await bcrypt.compare(password, storedHash);
+    if (!ok) return res.status(400).json({ message: 'Invalid credentials' });
 
-    // 5. Success response
-    res.json({
-      message: 'Login successful.',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      },
-      // token
+    const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+
+    // return token + safe user object
+    return res.json({
+      token,
+      user: { id: user._id.toString(), name: user.name || '', email: user.email, role: user.role }
     });
-
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error during login.' });
+    return res.status(500).json({ message: 'Server error' });
   }
 });
 
