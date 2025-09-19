@@ -2,52 +2,89 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-require('dotenv').config();
-
+const jwt = require('jsonwebtoken'); // optional
 const User = require('../models/User');
-const JWT_SECRET = process.env.JWT_SECRET || 'verysecret_jwt_key';
 
-// Register (users only via frontend)
+// ========================
+// REGISTER NEW USER
+// ========================
 router.post('/register', async (req, res) => {
+  const { name, email, password } = req.body; // removed phone
+
+  // 1. Validate input
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email and password are required.' });
+  }
+
   try {
-    const { name, email, password, phone } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+    // 2. Check if user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ error: 'Email already registered.' });
+    }
 
-    const exists = await User.findOne({ email });
-    if (exists) return res.status(400).json({ message: 'Email already registered' });
+    // 3. Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const hashed = await bcrypt.hash(password, 10);
-    // force role to 'user' — never trust client for role
-    const user = new User({ name: name || '', email, password: hashed, phone: phone || '', role: 'user' });
-    await user.save();
+    // 4. Create user
+    const newUser = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: 'user', // frontend users always default to 'user'
+    });
 
-    return res.status(201).json({ message: 'Registered', user: { id: user._id, email: user.email, role: user.role } });
+    await newUser.save();
+
+    res.status(201).json({ message: 'User registered successfully.' });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Server error during registration.' });
   }
 });
 
-// Login (both roles)
+// ========================
+// LOGIN USER
+// ========================
 router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  // 1. Validate input
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
-
+    // 2. Find user
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
 
-    if (!user.password) return res.status(500).json({ message: 'User has no password set' });
+    // 3. Compare password safely
+    const isMatch = await bcrypt.compare(password, user.password || '');
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials.' });
+    }
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(400).json({ message: 'Invalid credentials' });
+    // 4. Optional JWT
+    // const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
 
-    const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    // 5. Success response
+    res.json({
+      message: 'Login successful.',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      },
+      // token
+    });
+
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ error: 'Server error during login.' });
   }
 });
 
