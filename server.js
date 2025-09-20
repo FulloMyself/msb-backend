@@ -10,7 +10,8 @@ const docRoutes = require('./routes/documents');
 const loansRoutes = require('./routes/loans');
 const adminRoutes = require('./routes/admin');
 const usersRouter = require('./routes/users');
-const roleTestRoutes = require('./routes/roleRoles');
+app.use('/api/roles', require('./routes/roleRoutes'));
+
 
 
 
@@ -23,6 +24,7 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/test', roleTestRoutes);
 app.use('/api/documents', docRoutes);
 app.use('/api/loans', loansRoutes);
 app.use('/api/admin', adminRoutes);
