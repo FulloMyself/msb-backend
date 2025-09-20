@@ -4,7 +4,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const User = require('../models/User');
-const { authMiddleware } = require('../middleware/auth');
+const authMiddleware = require('../middleware/auth');
 
 // Allowed document types
 const DOC_TYPES = ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'];
