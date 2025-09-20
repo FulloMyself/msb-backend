@@ -1,38 +1,45 @@
 // backend/routes/documents.js
 const express = require('express');
-const router = express.Router();
+const AWS = require('aws-sdk');
 const multer = require('multer');
+const multerS3 = require('multer-s3');
 const path = require('path');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
+
+const router = express.Router();
 
 // Allowed document types
 const DOC_TYPES = ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'];
 
 // =======================
-// Multer setup
+// AWS S3 Setup
 // =======================
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, '../uploads'));
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    const uniqueName = `${file.fieldname}-${Date.now()}${ext}`;
-    cb(null, uniqueName);
-  }
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage: multerS3({
+    s3: s3,
+    bucket: process.env.S3_BUCKET_NAME,
+    acl: 'public-read',
+    key: function (req, file, cb) {
+      const ext = path.extname(file.originalname);
+      cb(null, `${file.fieldname}-${Date.now()}${ext}`);
+    },
+  }),
+});
 
 // =======================
-// Upload a document
+// Upload a document (S3)
 // =======================
-// Accept any field name since React sends type dynamically
 router.post('/upload', authMiddleware, upload.any(), async (req, res) => {
   try {
     const { type } = req.body;
-    const file = req.files?.[0]; // multer puts uploaded files in req.files array
+    const file = req.files?.[0]; // multer-s3 puts uploaded files in req.files array
 
     if (!DOC_TYPES.includes(type)) {
       return res.status(400).json({ error: 'Invalid document type' });
@@ -42,7 +49,8 @@ router.post('/upload', authMiddleware, upload.any(), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const fileUrl = `/uploads/${file.filename}`;
+    // Get the S3 URL
+    const fileUrl = file.location;
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -53,7 +61,7 @@ router.post('/upload', authMiddleware, upload.any(), async (req, res) => {
     user.documents[type].push({
       fileUrl,
       status: 'pending',
-      uploadedAt: new Date()
+      uploadedAt: new Date(),
     });
 
     await user.save();
