@@ -1,12 +1,13 @@
 // backend/middleware/auth.js
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is not set in environment variables!");
 }
 
-module.exports = (req, res, next) => {
+module.exports = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || req.headers.Authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -14,9 +15,15 @@ module.exports = (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET); // { userId, role }
 
-    req.user = payload; // { userId, role }
+    // Fetch full user from DB
+    const user = await User.findById(payload.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    req.user = user; // Attach full Mongoose User document
     next();
   } catch (err) {
     console.error("JWT verification failed:", err.message);
