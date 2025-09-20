@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Loan = require('../models/Loan');
 const authMiddleware = require('../middleware/auth');
 
+const DOC_TYPES = ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'];
 
 // ==========================
 // GET ADMIN DASHBOARD STATS
@@ -14,14 +15,12 @@ router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const pendingLoans = await Loan.countDocuments({ status: 'pending' });
-    const totalLoanAmount = await Loan.aggregate([
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
+    const totalLoanAmount = await Loan.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]);
 
     res.json({
       totalUsers,
       pendingLoans,
-      totalLoanAmount: totalLoanAmount[0] ? totalLoanAmount[0].total : 0
+      totalLoanAmount: totalLoanAmount[0]?.total || 0
     });
   } catch (err) {
     console.error(err);
@@ -36,8 +35,8 @@ router.get('/users', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
 
   try {
-    const users = await User.find().select('-password'); // exclude passwords
-    res.json(users);
+    const users = await User.find().select('-password');
+    res.json({ users });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error fetching users' });
@@ -52,7 +51,7 @@ router.get('/loans', authMiddleware, async (req, res) => {
 
   try {
     const loans = await Loan.find().populate('user', 'name email');
-    res.json(loans);
+    res.json({ loans });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error fetching loans' });
@@ -60,14 +59,34 @@ router.get('/loans', authMiddleware, async (req, res) => {
 });
 
 // ==========================
-// GET ALL DOCUMENTS
+// GET ALL DOCUMENTS (flattened)
 // ==========================
 router.get('/documents', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
 
   try {
     const users = await User.find({}, 'name email documents');
-    res.json(users);
+    const allDocuments = [];
+
+    users.forEach(user => {
+      for (const type in user.documents) {
+        if (Array.isArray(user.documents[type])) {
+          user.documents[type].forEach((doc, idx) => {
+            allDocuments.push({
+              userId: user._id,
+              userEmail: user.email,
+              type,
+              fileUrl: doc.fileUrl,
+              status: doc.status,
+              uploadedAt: doc.uploadedAt,
+              index: idx
+            });
+          });
+        }
+      }
+    });
+
+    res.json({ documents: allDocuments });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error fetching documents' });
@@ -77,13 +96,12 @@ router.get('/documents', authMiddleware, async (req, res) => {
 // ==========================
 // UPDATE DOCUMENT STATUS
 // ==========================
-router.put('/document/:userId/:docType/:index/status', authMiddleware, async (req, res) => {
+router.put('/documents/:userId/:docType/:index/status', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Unauthorized' });
 
   const { userId, docType, index } = req.params;
   const { status } = req.body;
 
-  const DOC_TYPES = ['idCopy', 'payslip', 'proofOfResidence', 'bankStatement'];
   if (!DOC_TYPES.includes(docType)) return res.status(400).json({ message: 'Invalid document type' });
   if (!['pending', 'approved', 'rejected'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
 
