@@ -53,9 +53,9 @@ router.get('/loans', authMiddleware, async (req, res) => {
     const loans = await Loan.find().populate('user', 'name email');
     res.json({ loans });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error fetching loans' });
-  }
+  console.error("Error in /api/admin/loans:", err);
+  res.status(500).json({ message: "Error fetching loans", error: err.message });
+}
 });
 
 // ==========================
