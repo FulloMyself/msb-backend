@@ -18,12 +18,12 @@ app.use(express.json());
 // make uploads publicly available
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.use('/api/auth', authRoutes);
-app.use('/api/documents', docRoutes);
-app.use('/api/loans', loansRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/users', usersRouter);
-app.use('/api/roles', require('./routes/roleRoutes'));
+app.use('/auth', authRoutes);
+app.use('/documents', docRoutes);
+app.use('/loans', loansRoutes);
+app.use('/admin', adminRoutes);
+app.use('/users', usersRouter);
+app.use('/roles', require('./routes/roleRoutes'));
 
 
 const PORT = process.env.PORT || 5000;
