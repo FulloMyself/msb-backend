@@ -50,7 +50,8 @@ router.post('/upload', authMiddleware, upload.any(), async (req, res) => {
     }
 
     // Get the S3 URL
-    const fileUrl = file.location;
+    const fileUrl = req.file.location;
+
 
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
