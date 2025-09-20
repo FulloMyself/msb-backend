@@ -1,19 +1,25 @@
 // backend/middleware/auth.js
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
-const JWT_SECRET = process.env.JWT_SECRET || 'verysecret_jwt_key';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is not set in environment variables!");
+}
 
 module.exports = (req, res, next) => {
-  const authHeader = req.headers.authorization || req.headers.Authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Missing or invalid authorization header' });
-  }
-  const token = authHeader.split(' ')[1];
   try {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Authorization header missing or malformed" });
+    }
+
+    const token = authHeader.split(" ")[1];
     const payload = jwt.verify(token, JWT_SECRET);
-    req.user = payload; // contains userId and role
-    return next();
+
+    req.user = payload; // { userId, role }
+    next();
   } catch (err) {
-    return res.status(401).json({ message: 'Invalid token' });
+    console.error("JWT verification failed:", err.message);
+    return res.status(403).json({ message: "Access denied. Invalid or expired token." });
   }
 };

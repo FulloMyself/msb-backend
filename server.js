@@ -4,11 +4,15 @@ const path = require('path');
 const cors = require('cors');
 require('dotenv').config();
 
+
 const authRoutes = require('./routes/auth');
 const docRoutes = require('./routes/documents');
 const loansRoutes = require('./routes/loans');
 const adminRoutes = require('./routes/admin');
 const usersRouter = require('./routes/users');
+const roleTestRoutes = require('./routes/roleRoles');
+
+
 
 
 const app = express();
