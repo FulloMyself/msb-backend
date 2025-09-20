@@ -1,9 +1,11 @@
 const mongoose = require('mongoose');
 
 const loanSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  amount: { type: Number, required: true, min: 300, max: 4000 },
-  status: { type: String, enum: ['pending','approved','rejected'], default: 'pending' },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // must exist!
+  amount: { type: Number, required: true },
+  purpose: String,
+  repaymentPeriod: String,
+  status: { type: String, default: 'pending' },
   createdAt: { type: Date, default: Date.now }
 });
 
